@@ -455,6 +455,86 @@ fn test_dedupe_ast_results_keeps_non_ast_entries() {
 }
 
 #[test]
+fn test_dedupe_results_folds_payload_variants_by_vulnerability_identity() {
+    let make = |payload: &str, data: &str, location: &str| {
+        let mut result = ScanResult::builder(FindingType::Reflected)
+            .inject_type("inHTML")
+            .method("GET")
+            .data(data)
+            .param("q")
+            .payload(payload)
+            .evidence("reflected")
+            .cwe("CWE-79")
+            .severity("Info")
+            .message_id(606)
+            .message_str("reflected")
+            .build();
+        result.location = location.to_string();
+        result
+    };
+    let first = make(
+        "<svg onload=alert(1)>",
+        "https://example.com/search?q=%3Csvg%3E",
+        "Query",
+    );
+    let second = make(
+        "<img src=x onerror=prompt(2)>",
+        "https://example.com/search?q=%3Cimg%3E",
+        "Query",
+    );
+    let other_location = make("PAY", "https://example.com/search?q=PAY", "Header");
+
+    let deduped = super::postprocess::dedupe_results_for_model(
+        vec![first, second, other_location],
+        None,
+        true,
+    );
+    assert_eq!(
+        deduped.len(),
+        2,
+        "same param/context/evidence collapses; a different wire location does not"
+    );
+    assert!(deduped.iter().any(|r| r.location == "Header"));
+
+    let deep = super::postprocess::dedupe_results_for_model(
+        vec![
+            make("p1", "https://example.com/search?q=a", "Query"),
+            make("p2", "https://example.com/search?q=b", "Query"),
+        ],
+        None,
+        false,
+    );
+    assert_eq!(deep.len(), 2, "deep-scan keeps one row per payload");
+}
+
+#[test]
+fn test_dedupe_results_keeps_distinct_tiers_for_redundant_r_collapse() {
+    let mut base = ScanResult::builder(FindingType::Reflected)
+        .inject_type("inHTML")
+        .method("GET")
+        .data("https://example.com/?q=a")
+        .param("q")
+        .payload("alert(1)")
+        .evidence("reflected")
+        .cwe("CWE-79")
+        .severity("Info")
+        .message_id(606)
+        .message_str("reflected")
+        .build();
+    base.location = "Query".to_string();
+    let mut verified = base.clone();
+    verified.result_type = FindingType::Verified;
+    verified.severity = "High".to_string();
+
+    let deduped = super::postprocess::dedupe_results_for_model(vec![base, verified], None, true);
+    assert_eq!(
+        deduped.len(),
+        2,
+        "general identity dedup preserves the tier split; collapse_redundant_reflected owns R-vs-V"
+    );
+}
+
+#[test]
 fn test_generate_poc_plain_query() {
     let r = ScanResult::builder(FindingType::Reflected)
         .inject_type("inHTML")
@@ -2189,10 +2269,11 @@ async fn test_render_results_target_summary_scales_with_many_targets_and_finding
     let results: Vec<ScanResult> = (0..N)
         .map(|i| {
             let t = (i / 2) * 2;
-            // Non-zero message_id + unique evidence: not folded by the
-            // render-time AST dedup, so every finding reaches the summary.
+            // Two distinct injection contexts keep both findings after the
+            // vulnerability-identity dedup, so every finding reaches the
+            // summary.
             ScanResult::builder(FindingType::Reflected)
-                .inject_type("inHTML")
+                .inject_type(if i % 2 == 0 { "inHTML" } else { "inHTML-URL" })
                 .method("GET")
                 .data(format!("https://example.com/p{t}?q=x{i}"))
                 .param("q".to_string())

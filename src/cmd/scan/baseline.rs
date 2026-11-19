@@ -121,13 +121,27 @@ fn finding_key(id: FindingIdentity<'_>) -> String {
 }
 
 pub(crate) fn key_for_result(r: &Result) -> String {
+    key_for_result_with_tier(r, r.result_type.short())
+}
+
+/// [`key_for_result`] using the tier selected by `--tier-model`.
+///
+/// Deduplication runs on the view the report will render, so two findings that
+/// become the same tier under the confidence model must fold into one. Baseline
+/// matching keeps using the legacy tier: changing that would silently make
+/// every finding "new" for users who opt into the confidence view.
+pub(crate) fn key_for_result_for_model(r: &Result, model: Option<&str>) -> String {
+    key_for_result_with_tier(r, r.tier_for_model(model).short())
+}
+
+fn key_for_result_with_tier(r: &Result, tier: &str) -> String {
     finding_key(FindingIdentity {
         data: &r.data,
         param: &r.param,
         location: &r.location,
         inject_type: &r.inject_type,
         cwe: &r.cwe,
-        tier: r.result_type.short(),
+        tier,
         evidence: &r.evidence,
         detection_method: r.detection_method.as_str(),
         payload: &r.payload,

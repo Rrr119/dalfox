@@ -1,6 +1,7 @@
 //! Result post-processing: context extraction, priority scoring, and
-//! AST-finding deduplication. Split out of the monolithic `scan.rs` so the
-//! scan orchestrator only orchestrates.
+//! vulnerability-identity deduplication (AST evidence plus payload variants).
+//! Split out of the monolithic `scan.rs` so the scan orchestrator only
+//! orchestrates.
 
 use crate::scanning::result::{Confidence, FindingType, Result};
 use std::collections::HashMap;
@@ -79,6 +80,7 @@ pub(crate) fn ast_dedup_parts(result: &Result) -> Option<(&str, &str, &str)> {
 // Generic over owned and borrowed findings: a job's mid-scan read folds the
 // live list by reference, under its lock, without cloning request/response
 // bodies it is about to drop.
+#[cfg(test)]
 pub(crate) fn dedupe_ast_results<T: std::borrow::Borrow<Result>>(results: Vec<T>) -> Vec<T> {
     dedupe_ast_results_for_model(results, None)
 }
@@ -109,4 +111,66 @@ pub(crate) fn dedupe_ast_results_for_model<T: std::borrow::Borrow<Result>>(
     }
 
     out
+}
+
+/// Vulnerability identity used to fold duplicate payload findings.
+///
+/// AST findings keep their evidence-centric key (one page-level sink is
+/// re-found for every parameter). Everything else is keyed by the same
+/// payload-invariant identity as `--baseline`: target + parameter + wire
+/// location + injection context + CWE + tier + evidence family. The payload,
+/// query string, AST offsets, and request/response captures are excluded on
+/// purpose, so `alert(1)` and `prompt(1)` variants of the same reflected issue
+/// become one report row.
+fn dedup_identity_key(result: &Result, model: Option<&str>) -> Option<String> {
+    if result.message_id == 0 || result.result_type == FindingType::Informational {
+        return None;
+    }
+    Some(format!(
+        "{}|{}|{}",
+        result.origin_target.as_deref().unwrap_or(""),
+        result.method,
+        super::baseline::key_for_result_for_model(result, model)
+    ))
+}
+
+/// Deduplicate all findings for the selected report view.
+///
+/// AST findings always fold by evidence. With `collapse_duplicates` every
+/// non-informational finding additionally folds by vulnerability identity,
+/// keeping the strongest severity / confidence representative (the tier is
+/// part of the identity, so `R` and `V` stay separate here).
+/// `--deep-scan` passes `false` to preserve its one-finding-per-payload
+/// contract. `model` is the selected `--tier-model`; identity uses the view's
+/// tier, so dedup cannot pick a winner the subsequent filter will drop.
+pub(crate) fn dedupe_results_for_model<T: std::borrow::Borrow<Result>>(
+    results: Vec<T>,
+    model: Option<&str>,
+    collapse_duplicates: bool,
+) -> Vec<T> {
+    let results = dedupe_ast_results_for_model(results, model);
+    if !collapse_duplicates {
+        return results;
+    }
+
+    let mut index_by_key: HashMap<String, usize> = HashMap::new();
+    let mut slots: Vec<Option<T>> = Vec::with_capacity(results.len());
+    for result in results {
+        let Some(key) = dedup_identity_key(result.borrow(), model) else {
+            slots.push(Some(result));
+            continue;
+        };
+        if let Some(&existing) = index_by_key.get(&key) {
+            let replace = slots[existing].as_ref().is_some_and(|current| {
+                result_priority(result.borrow(), model) > result_priority(current.borrow(), model)
+            });
+            if replace {
+                slots[existing] = Some(result);
+            }
+        } else {
+            index_by_key.insert(key, slots.len());
+            slots.push(Some(result));
+        }
+    }
+    slots.into_iter().flatten().collect()
 }

@@ -24,23 +24,49 @@ use super::*;
 pub(crate) fn estimate_param_requests(
     p: &Param,
     scan_args: &ScanArgs,
-    enc_factor: usize,
+    _enc_factor: usize,
     apply_cap: &dyn Fn(usize) -> usize,
 ) -> usize {
-    let refl_len = if let Some(ctx) = &p.injection_context {
-        crate::scanning::xss_common::get_dynamic_payloads(ctx, scan_args)
-            .unwrap_or_else(|_| vec![])
-            .len()
+    let refl_base = if let Some(ctx) = &p.injection_context {
+        crate::scanning::xss_common::get_dynamic_payloads(ctx, scan_args).unwrap_or_else(|_| vec![])
     } else {
-        let html_len = crate::payload::get_dynamic_xss_html_payloads().len() * enc_factor;
-        let js_len = crate::payload::XSS_JAVASCRIPT_PAYLOADS.len() * enc_factor;
-        html_len + js_len
+        get_fallback_reflection_payloads(scan_args).unwrap_or_else(|_| vec![])
     };
+    let refl_len = contextual_payloads(p, refl_base, scan_args, true).len();
     // The exact set `generate_param_jobs` builds (JS-context breakouts, adaptive
     // variants, the JSONP verifiers every context gets), so the estimate cannot
     // drift from it. Pure — safe to call from the estimator.
-    let dom_len = get_dom_payloads(p, scan_args).map_or(0, |v| v.len());
+    let dom_len = get_dom_payloads(p, scan_args)
+        .map_or(0, |v| contextual_payloads(p, v, scan_args, false).len());
     apply_cap(refl_len).saturating_add(apply_cap(dom_len))
+}
+
+/// Apply context-shape selection unless the operator explicitly asked for an
+/// exhaustive/custom-only run. Split out so the request estimator and the real
+/// job planner cannot disagree about the effect.
+fn contextual_payloads(
+    param: &Param,
+    payloads: Vec<String>,
+    args: &ScanArgs,
+    reflection_phase: bool,
+) -> Vec<String> {
+    if args.deep_scan || args.only_custom_payload {
+        return payloads;
+    }
+    let selected = if reflection_phase {
+        crate::scanning::context_payloads::select_reflection_for_param(param, payloads, false)
+    } else {
+        crate::scanning::context_payloads::select_for_param(param, payloads, false)
+    };
+    if selected.dropped > 0 {
+        crate::dbg_log!(
+            "context payload selection (param={}, context={:?}): dropped {} incompatible payload(s)",
+            param.name,
+            selected.context,
+            selected.dropped
+        );
+    }
+    selected.payloads
 }
 /// === Stage 4: Payload Generation — build per-parameter payload sets ===
 ///
@@ -238,6 +264,14 @@ pub(crate) fn generate_param_jobs(
                 reflection_payloads.retain(|x| x != p);
                 reflection_payloads.insert(0, p.to_string());
             }
+        }
+
+        // Drop shapes that cannot execute at the observed landing site before
+        // they consume a per-parameter cap slot. Deep scans and custom-only
+        // runs are deliberately left untouched.
+        if !xml_namespace_probe_only {
+            reflection_payloads = contextual_payloads(param, reflection_payloads, args, true);
+            dom_payloads = contextual_payloads(param, dom_payloads, args, false);
         }
 
         // Cap the *base* reflection and DOM catalogs independently (each to

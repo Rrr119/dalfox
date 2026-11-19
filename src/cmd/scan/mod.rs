@@ -63,7 +63,9 @@ pub(crate) use args::{
     MIN_CONFIDENCE_HIGH, parse_base_url_arg, parse_force_waf_arg, parse_http_method_arg,
 };
 pub(crate) use logging::log_info;
-pub(crate) use postprocess::{ast_dedup_parts, dedupe_ast_results_for_model};
+pub(crate) use postprocess::{
+    ast_dedup_parts, dedupe_ast_results_for_model, dedupe_results_for_model,
+};
 pub(crate) use preflight::finish_waf_detection;
 // Shared with `job::normalize_proxy` so REST/MCP refuse the same unroutable
 // proxy values the CLI startup gate does. The CLI wrapper that also rejects

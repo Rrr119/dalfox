@@ -37,6 +37,14 @@ During discovery Dalfox classifies each parameter by **injection context**, the 
 
 Sending only the payloads that fit the context keeps the request count down.
 
+Before the per-parameter cap, Dalfox also drops catalog entries whose execution
+shape cannot work at the recorded landing site — a bare `javascript:` URI in
+HTML text, an `onerror=` fragment in a script body, or a plain `alert(1)` in an
+attribute value. One representative of each otherwise-dropped shape stays in
+the reflection set so an escaped echo can still produce an `R`; the DOM
+verification set uses the strict selection. `--deep-scan` and
+`--only-custom-payload` leave the catalog untouched.
+
 ## CSP-aware bypass payloads
 
 If the preflight response carries a `Content-Security-Policy` (or `…-Report-Only`) header, or the same policy in a `<meta http-equiv>` tag, Dalfox parses it and adds script payloads aimed at that policy's weak spots. It only adds payloads for directives that can actually be abused, so a target with no CSP gets no extra requests.

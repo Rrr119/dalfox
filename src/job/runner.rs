@@ -91,14 +91,18 @@ pub(crate) fn sanitize_results(
         .iter()
         .filter(|r| !r.below_min_confidence(view.min_confidence.as_deref()))
         .collect();
-    crate::cmd::scan::dedupe_ast_results_for_model(kept, view.tier_model.as_deref())
-        .into_iter()
-        .map(|r| {
-            let mut r = r.to_sanitized(view.include_request, view.include_response);
-            r.apply_tier_model(view.tier_model.as_deref());
-            r
-        })
-        .collect()
+    crate::cmd::scan::dedupe_results_for_model(
+        kept,
+        view.tier_model.as_deref(),
+        view.collapse_duplicates,
+    )
+    .into_iter()
+    .map(|r| {
+        let mut r = r.to_sanitized(view.include_request, view.include_response);
+        r.apply_tier_model(view.tier_model.as_deref());
+        r
+    })
+    .collect()
 }
 
 /// What a finished scan left behind, for the caller to record in its own job
@@ -126,6 +130,10 @@ pub(crate) struct ScanRun {
     /// stored results or the settled tally.
     pub(crate) min_confidence: Option<String>,
     pub(crate) tier_model: Option<String>,
+    /// Whether the report folds duplicate payload findings by vulnerability
+    /// identity. False for `deep_scan`, whose contract keeps one row per
+    /// reflecting payload.
+    pub(crate) collapse_duplicates: bool,
 }
 
 impl ScanRun {
@@ -156,6 +164,7 @@ impl ScanRun {
                 include_response,
                 min_confidence: self.min_confidence.clone(),
                 tier_model: self.tier_model.clone(),
+                collapse_duplicates: self.collapse_duplicates,
             },
         );
         progress
@@ -1003,5 +1012,6 @@ pub(crate) async fn execute_scan(
         warnings: std::mem::take(&mut *job_warnings.lock().unwrap_or_else(|e| e.into_inner())),
         min_confidence: args.min_confidence.clone(),
         tier_model: args.tier_model.clone(),
+        collapse_duplicates: !args.deep_scan,
     }
 }

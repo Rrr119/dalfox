@@ -1,0 +1,17 @@
+{
+  "root": "/home/dev/feedback/uid28734",
+  "B": "/home/dev/feedback/uid28734",
+  "sha": "59fc533748850e8f62bfceb6f8350c7ab3cc3a33",
+  "wslDistro": "Ubuntu-26.04",
+  "source": {
+    "owner": "hahwul",
+    "repo": "dalfox",
+    "sha": "59fc533748850e8f62bfceb6f8350c7ab3cc3a33"
+  },
+  "fork": {
+    "owner": "Rrr119",
+    "repo": "dalfox",
+    "cloneUrl": "https://github.com/Rrr119/dalfox.git"
+  },
+  "at": "2026-11-19T21:31:20.408Z"
+}

@@ -77,7 +77,7 @@ regresses against the committed one.
 | --- | --- | --- |
 | `effectiveness_snapshot.cr` | `effectiveness` | precision / recall / FP / FN against the labelled corpus |
 | `perf_budget.cr` | `perf-budget` | requests and wall-clock per scenario |
-| `ab_diff.cr` | `ab-diff <old-bin>` | findings gained and lost between two binaries |
+| `ab_diff.cr` | `ab-diff <old-bin>` | findings gained/lost, request volume, and duplicate identities between two binaries |
 | `xssmaze_score.cr` | `xssmaze-score` | detection rate against the XSSMaze lab (needs Docker) |
 
 `just harness` runs every gate, continuing past failures.

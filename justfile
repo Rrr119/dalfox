@@ -167,7 +167,8 @@ perf-budget: build
 perf-budget-update: build
     PERF_UPDATE_BASELINE=1 crystal run scripts/perf_budget.cr
 
-# Diff findings between a baseline binary and the working build.
+# Diff findings, request volume, and duplicate identities between a baseline
+# binary and the working build.
 [group('benchmark')]
 ab-diff old: build
     AB_OLD_BIN={{old}} crystal run scripts/ab_diff.cr

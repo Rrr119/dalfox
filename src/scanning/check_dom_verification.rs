@@ -713,7 +713,7 @@ fn body_looks_html_renderable(text: &str) -> bool {
 /// `classify_dom_evidence` so callers can surface a human-friendly hint
 /// in the V finding (e.g. "JS-context AST" vs "DOM marker").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DomEvidenceKind {
+pub enum DomEvidenceKind {
     /// Dalfox marker class/id observed in the parsed DOM.
     Marker,
     /// Executable URL protocol (`javascript:` / `data:`) reflected into a

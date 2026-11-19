@@ -233,6 +233,21 @@ def describe(f : Dalfox::Finding) : String
   " via #{f.detection_method.empty? ? "-" : f.detection_method} (msg #{f.message_id})"
 end
 
+# Dalfox's own request tally, when the report carried it. Older binaries or a
+# crashed scan may omit `meta`; summing a nil as zero keeps the comparison
+# usable instead of turning a measurement gap into a harness failure.
+def requests(result : Dalfox::ScanResult) : Int64
+  result.total_requests || 0_i64
+end
+
+# Findings that repeat the same vulnerability identity. `Finding#key` excludes
+# the payload, so this is exactly the duplicate count result dedup should
+# reduce. A `V` and an `R` for one parameter are also duplicate identities here;
+# the scanner's redundant-R collapse removes those before the report.
+def duplicate_identities(findings : Array(Dalfox::Finding)) : Int32
+  findings.size - findings.map(&.key).to_set.size
+end
+
 # ---------------------------------------------------------------------------
 # Main.
 # ---------------------------------------------------------------------------
@@ -306,6 +321,13 @@ churn = comparable.sum { |d| d.strict_gained + d.strict_lost } -
         comparable.sum { |d| d.gained.size + d.lost.size }
 old_broken = diffs.count { |d| d.old_result.crashed? }
 new_broken = diffs.count { |d| d.new_result.crashed? }
+old_requests = comparable.sum { |d| requests(d.old_result) }
+new_requests = comparable.sum { |d| requests(d.new_result) }
+old_duplicates = comparable.sum { |d| duplicate_identities(d.old_result.findings) }
+new_duplicates = comparable.sum { |d| duplicate_identities(d.new_result.findings) }
+request_delta = new_requests - old_requests
+duplicate_retention =
+  old_duplicates > 0 ? ((new_duplicates.to_f / old_duplicates) * 100).round(1) : 0.0
 
 puts ""
 puts "==> regressions — findings OLD had that NEW does not (#{regressions.size} targets)"
@@ -351,6 +373,10 @@ puts "    targets gained       #{gains.size}"
 # Payload-level churn is expected and harmless: the same finding reached through
 # a different bypass variant is the same regression-relevant fact.
 puts "    payload-only churn   #{churn} (same finding, different PoC — noise)"
+puts "    requests old -> new  #{old_requests} -> #{new_requests}" \
+     " (#{request_delta >= 0 ? "+" : ""}#{request_delta})"
+puts "    duplicate identities #{old_duplicates} -> #{new_duplicates}" \
+     " (#{duplicate_retention}% of old)"
 puts "    scans crashed/timed  old #{old_broken}, new #{new_broken}"
 puts "    wall-clock           old #{old_wall.total_seconds.round(1)}s -> new #{new_wall.total_seconds.round(1)}s" \
      " (#{old_wall.total_seconds > 0 ? ((new_wall.total_seconds / old_wall.total_seconds - 1) * 100).round(1) : 0.0}%)"

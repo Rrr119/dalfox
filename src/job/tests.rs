@@ -1478,6 +1478,7 @@ fn async_jobs_cap_findings_and_say_so() {
         warnings: Vec::new(),
         min_confidence: None,
         tier_model: None,
+        collapse_duplicates: true,
     };
     let mut job = Job::new_queued("http://t/".into());
     assert_eq!(
@@ -1531,6 +1532,7 @@ fn settle_reachability_failure_respects_a_concurrent_cancel() {
         warnings: Vec::new(),
         min_confidence: None,
         tier_model: None,
+        collapse_duplicates: true,
     };
 
     let mut unreachable = Job::new_queued("http://t/".into());
@@ -2036,6 +2038,7 @@ fn settle_note_fills_empty_message_and_appends_only_when_asked() {
         warnings: Vec::new(),
         min_confidence: None,
         tier_model: None,
+        collapse_duplicates: true,
     };
     let note = "SCAN_TIMEOUT: scan exceeded scan_timeout (5s); returning partial results";
     for (prior, append, want) in [
@@ -2068,6 +2071,7 @@ fn settle_keeps_session_lost_on_a_cancelled_job() {
         warnings: Vec::new(),
         min_confidence: None,
         tier_model: None,
+        collapse_duplicates: true,
     };
     let mut job = Job::new_queued("http://t/".into());
     assert_eq!(
@@ -2124,6 +2128,7 @@ fn settle_keeps_session_lost_when_the_cancel_lands_after_the_run() {
         warnings: (0..MAX_JOB_WARNINGS + 8).map(|i| format!("w{i}")).collect(),
         min_confidence: None,
         tier_model: None,
+        collapse_duplicates: true,
     };
     let mut job = Job::new_queued("http://t/".into());
     assert!(job.cancel());
@@ -2184,6 +2189,7 @@ async fn sanitized_results_folds_duplicate_ast_findings() {
         warnings: Vec::new(),
         min_confidence: None,
         tier_model: None,
+        collapse_duplicates: true,
     };
     let progress = JobProgress::default();
     let out = run.sanitized_results(&progress, false, false).await;
@@ -2232,6 +2238,7 @@ async fn sanitized_results_honor_min_confidence() {
             warnings: Vec::new(),
             min_confidence: min.map(String::from),
             tier_model: None,
+            collapse_duplicates: true,
         };
         let progress = JobProgress::default();
         let kept = run.sanitized_results(&progress, false, false).await;
@@ -2276,6 +2283,7 @@ async fn sanitized_results_filter_min_confidence_before_ast_dedup() {
         warnings: Vec::new(),
         min_confidence: Some("high".to_string()),
         tier_model: None,
+        collapse_duplicates: true,
     };
     let progress = JobProgress::default();
     let kept = run.sanitized_results(&progress, false, false).await;

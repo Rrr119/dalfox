@@ -7,7 +7,9 @@
 //!
 //! ## Stage 4: Payload Generation (`generate_param_jobs`)
 //! Builds per-parameter payload sets based on `injection_context`, CSP bypass,
-//! technology-specific payloads, and WAF bypass mutations/encoders.
+//! technology-specific payloads, and WAF bypass mutations/encoders. The base
+//! catalogs pass through `context_payloads`, which drops execution shapes that
+//! cannot work at the recorded landing site before they consume a cap slot.
 //! Output: `ParamPayloadJob` tuples fed into the concurrent scan loop.
 //!
 //! ## Stage 5: Reflection Check (`ScanWorkerCtx::run_reflection_phase`, see
@@ -75,7 +77,9 @@ pub mod ast_dom_analysis;
 pub mod ast_integration;
 pub mod check_dom_verification;
 pub mod check_reflection;
+pub mod context_payloads;
 pub mod csti;
+pub mod dom_detection;
 pub(crate) use check_reflection::decode_html_entities;
 /// Shared test-only fixtures modelling server-side reflection transforms.
 #[cfg(test)]

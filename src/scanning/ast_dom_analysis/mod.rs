@@ -376,7 +376,7 @@ pub(crate) fn parse_skip_reason(source: &str) -> Option<ParseSkipReason> {
 }
 
 /// Represents a potential DOM XSS vulnerability found via AST analysis
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DomXssVulnerability {
     /// Line number where the vulnerability was detected
     pub line: u32,

@@ -4340,13 +4340,24 @@ fn test_estimate_param_requests_counts_both_scan_phases() {
     // A JS-context param runs the script-breakout DOM set too (plus the JSONP
     // verifiers), so it is billed for both halves.
     let js = param_with_context(Some(InjectionContext::Javascript(None)));
-    let js_refl = crate::scanning::xss_common::get_dynamic_payloads(
-        js.injection_context.as_ref().expect("js context"),
-        &args,
+    let js_refl = crate::scanning::context_payloads::select_reflection_for_param(
+        &js,
+        crate::scanning::xss_common::get_dynamic_payloads(
+            js.injection_context.as_ref().expect("js context"),
+            &args,
+        )
+        .expect("reflection payloads"),
+        false,
     )
-    .expect("reflection payloads")
+    .payloads
     .len();
-    let js_dom = get_dom_payloads(&js, &args).expect("dom payloads").len();
+    let js_dom = crate::scanning::context_payloads::select_for_param(
+        &js,
+        get_dom_payloads(&js, &args).expect("dom payloads"),
+        false,
+    )
+    .payloads
+    .len();
     assert!(js_dom > 0, "a JS-context param has a DOM payload set");
     assert_eq!(
         estimate_param_requests(&js, &args, 1, &uncapped),

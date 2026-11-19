@@ -242,6 +242,22 @@ dalfox scan https://target.app --limit 50
 dalfox scan https://target.app --limit 10 --limit-result-type v
 ```
 
+## Result deduplication
+
+Before rendering, Dalfox folds non-informational findings that describe the same
+vulnerability: same target, parameter, wire location, injection context, CWE,
+tier, and evidence family. The payload, its query string, AST line/column
+offsets, and request/response captures are excluded. This keeps one report row
+when several payload variants prove the same issue, and the strongest severity /
+confidence representative wins. Because the tier is part of the identity, an
+`R` and a `V` still remain separate here and are folded by the redundant-`R`
+pass instead.
+
+`R` findings still collapse into an existing `V` for the same parameter and
+injection context, and AST findings still fold by their source→sink evidence.
+`--deep-scan` disables the payload-variant fold so research runs keep one row
+per reflecting payload. `I` findings are never folded by this pass.
+
 ## Baselines: reporting only what is new
 
 `--only-poc` and `--limit` filter by *shape*. They can't tell a finding you already triaged from one that appeared this morning. A repo with 100 known findings shows the same 100 on every pull request, so the gate is either always red or switched off.

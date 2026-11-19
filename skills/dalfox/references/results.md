@@ -242,11 +242,17 @@ final results, not the stream, when the two disagree.
 
 ## Why the counts don't add up
 
-Two post-processing passes run before output, so summed tiers are not the number
-of findings recorded during the scan:
+Three post-processing passes run before output, so summed tiers are not the
+number of findings recorded during the scan:
 
 - **Redundant `R` collapse** — an `R` is dropped when a `V` exists for the same
   `(param, inject_type)` on that target. `V` and `A` are never dropped.
+- **Vulnerability-identity dedup** — non-informational findings with the same
+  target, parameter, wire location, injection context, CWE, tier, and evidence
+  family fold into one row. Payload/query-string variation does not create a
+  second finding; the strongest severity / confidence representative wins.
+  Tier stays part of the identity, so `R`/`V` are handled by the redundant-`R`
+  pass. `--deep-scan` disables this pass to keep one row per reflecting payload.
 - **AST dedup** — one finding per equivalent AST fingerprint survives, the
   strongest by `type` then `severity`. `confidence` does not participate.
 

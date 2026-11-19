@@ -888,12 +888,27 @@ pub(crate) struct JobProgress {
 
 /// How a job's raw findings become the results a caller sees: the request's
 /// opt-in raw-traffic flags and its confidence floor.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct ResultView {
     pub include_request: bool,
     pub include_response: bool,
     pub min_confidence: Option<String>,
     pub tier_model: Option<String>,
+    /// Fold payload variants that describe the same vulnerability identity.
+    /// `--deep-scan` turns this off to preserve one finding per payload.
+    pub collapse_duplicates: bool,
+}
+
+impl Default for ResultView {
+    fn default() -> Self {
+        Self {
+            include_request: false,
+            include_response: false,
+            min_confidence: None,
+            tier_model: None,
+            collapse_duplicates: true,
+        }
+    }
 }
 
 impl ResultView {
@@ -905,6 +920,7 @@ impl ResultView {
             include_response: args.include_response,
             min_confidence: args.min_confidence.clone(),
             tier_model: args.tier_model.clone(),
+            collapse_duplicates: !args.deep_scan,
         }
     }
 }

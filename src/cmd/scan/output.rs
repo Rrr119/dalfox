@@ -10,7 +10,7 @@ use super::args::ScanArgs;
 use super::baseline::Baseline;
 use super::logging::log_warn;
 use super::poc::render_finding_block;
-use super::postprocess::dedupe_ast_results;
+use super::postprocess::dedupe_results_for_model;
 use crate::scanning::result::{FindingType, Result};
 use crate::target_parser::Target;
 
@@ -617,7 +617,8 @@ pub(crate) async fn render_results(
             r
         })
         .collect();
-    let mut final_results = dedupe_ast_results(kept);
+    let mut final_results =
+        dedupe_results_for_model(kept, args.tier_model.as_deref(), !args.deep_scan);
 
     final_results.retain(|r| args.matches_only_poc(r));
 

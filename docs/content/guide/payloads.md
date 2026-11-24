@@ -18,6 +18,7 @@ Dalfox composes payloads from several families:
 | **JavaScript** | `";alert(1);//` | Inside a `<script>` block |
 | **Event handler** | `onmouseover=alert(1)` | Existing attribute value |
 | **DOM clobbering** | `<img id=x>` | Legacy DOM lookups |
+| **Prototype pollution** | `__proto__[innerHTML]=<img src=x onerror=alert(1)>` | Client-side merge/copy gadgets |
 | **URL protocol** | `javascript:alert(1)` | `href`/`src`-like attributes |
 | **CSP bypass** | `strict-dynamic` script gadgets, nonce reuse, JSONP on allowed hosts | When the response carries a bypassable CSP |
 | **mXSS** | `<foreignobject>`/DOMPurify bypasses | Sanitizer-mutated DOM |
@@ -33,7 +34,7 @@ During discovery Dalfox classifies each parameter by **injection context**, the 
 - Inside a quoted attribute → attribute-breakout and self-triggering event-handler payloads, with URL-protocol payloads first
 - Inside `<script>` → string-delimiter breakouts (`'-alert(1)-'`, `${alert(1)}`, …) and `</script>` tag breakouts
 - Inside `<style>` → `</style>` breakouts followed by an HTML tag
-- Unknown → an interleaved mix of HTML, attribute, mXSS, DOM-clobbering, and URL-protocol payloads
+- Unknown → an interleaved mix of HTML, attribute, mXSS, DOM-clobbering, prototype-pollution, and URL-protocol payloads
 
 Sending only the payloads that fit the context keeps the request count down.
 
@@ -130,6 +131,7 @@ dalfox payload special-chars   # < > " ' ` ( ) ... and encoded variants
 dalfox payload functions       # confirmable sinks: alert(1), window['alert'](1), ...
 dalfox payload awesome-alert   # PoC alerts: alert(document.domain), alert(document.cookie)
 dalfox payload dom-clobbering  # DOM clobbering vectors
+dalfox payload prototype-pollution  # __proto__ / constructor.prototype merge payloads
 dalfox payload mxss            # mutation-XSS / sanitizer-bypass payloads
 dalfox payload blind           # blind-XSS skeletons ({} = your callback URL)
 dalfox payload portswigger     # fetch + print remote list

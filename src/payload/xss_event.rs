@@ -103,6 +103,18 @@ pub(crate) fn common_event_handler_names() -> &'static [&'static str] {
     ]
 }
 
+/// Whether `name` is one of the standard DOM event-handler property names.
+///
+/// Used by the AST sink classifier for `el.onclick = tainted` and
+/// `Object.assign(el, {onclick: tainted})`. Matching the canonical list (rather
+/// than a bare `starts_with("on")`) keeps ordinary properties such as
+/// `once` / `online` / `onCall` out of the event-injection findings.
+pub(crate) fn is_common_event_handler_name(name: &str) -> bool {
+    common_event_handler_names()
+        .iter()
+        .any(|event| event.eq_ignore_ascii_case(name))
+}
+
 /// Dynamically build attribute payloads by combining common event handlers with
 /// JavaScript execution primitives from XSS_JAVASCRIPT_PAYLOADS.
 /// This replaces the previous static XSS_ATTRIBUTE_PAYLOADS constant to ensure

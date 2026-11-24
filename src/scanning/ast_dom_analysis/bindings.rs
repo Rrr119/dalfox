@@ -184,6 +184,11 @@ impl<'a> DomXssVisitor<'a> {
                 self.element_tag_vars.remove(var_name);
             }
         }
+        if self.expr_is_dom_element_receiver(init) {
+            self.dom_element_vars.insert(var_name.to_string());
+        } else {
+            self.dom_element_vars.remove(var_name);
+        }
 
         // `var probe = document.getElementById('probe')` on an element whose
         // markup reflects the parameter (see `reflected_markup`).

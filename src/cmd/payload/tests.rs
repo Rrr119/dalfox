@@ -66,6 +66,7 @@ async fn test_run_payload_known_selectors_return_clean() {
         "functions",
         "awesome-alert",
         "dom-clobbering",
+        "prototype-pollution",
         "mxss",
         "blind",
     ] {
@@ -281,6 +282,10 @@ fn test_static_selector_counts_match_the_lists_they_describe() {
     assert_eq!(
         count_of("dom-clobbering"),
         crate::payload::get_dom_clobbering_payloads().len()
+    );
+    assert_eq!(
+        count_of("prototype-pollution"),
+        crate::payload::get_prototype_pollution_payloads().len()
     );
     assert_eq!(count_of("mxss"), crate::payload::get_mxss_payloads().len());
     assert_eq!(count_of("blind"), crate::payload::XSS_BLIND_PAYLOADS.len());

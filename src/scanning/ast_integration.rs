@@ -764,6 +764,7 @@ fn extract_search_param_value<'a>(payload: &'a str, key: &str) -> &'a str {
 pub(crate) fn generate_dom_xss_poc(source: &str, sink: &str) -> (String, String) {
     let marker = crate::scanning::markers::class_marker();
     let target = crate::scanning::ast_dom_analysis::attribute_sink_target(sink);
+    let is_prototype_pollution = sink.starts_with("prototypePollution");
     // Sink-aware payload shape:
     //   * URL-attribute sinks (`src`, `href`, `xlink:href`, …) receive an
     //     executable URL scheme (`data:text/javascript,…`) so they fire
@@ -787,7 +788,8 @@ pub(crate) fn generate_dom_xss_poc(source: &str, sink: &str) -> (String, String)
     // appended to the DOM the browser parses the assigned value as JS
     // source verbatim — same effective shape as `eval(payload)`.
     // An `on*` attribute set through `setAttribute` / jQuery `attr` runs as JS.
-    let is_js_eval_sink = (target != sink && target.starts_with("on"))
+    let is_js_eval_sink = (target.starts_with("on")
+        && crate::payload::is_common_event_handler_name(target))
         || matches!(
             target,
             "eval"
@@ -806,7 +808,16 @@ pub(crate) fn generate_dom_xss_poc(source: &str, sink: &str) -> (String, String)
     // Navigation sinks (`location.href`, `a.href`, `window.open`, a form
     // action, …): only a `javascript:` URL runs there — a top-level `data:`
     // navigation is blocked, and an HTML payload is just a relative path.
-    let shape = if crate::scanning::ast_dom_analysis::is_navigation_sink(sink) {
+    let shape = if is_prototype_pollution {
+        // A prototype-pollution finding is only actionable when the polluted
+        // property reaches an executable sink. Carry both the merge key and a
+        // gadget value so the same payload proves pollution and XSS.
+        if sink.contains("constructor") {
+            format!("constructor[prototype][innerHTML]=<img src=x onerror=alert(1) class={marker}>")
+        } else {
+            format!("__proto__[innerHTML]=<img src=x onerror=alert(1) class={marker}>")
+        }
+    } else if crate::scanning::ast_dom_analysis::is_navigation_sink(sink) {
         format!("javascript:alert(1)//{marker}")
     } else if is_url_attr_sink {
         format!("data:text/javascript,alert(1)/*{marker}*/")
@@ -830,7 +841,11 @@ pub(crate) fn generate_dom_xss_poc(source: &str, sink: &str) -> (String, String)
         shape
     };
 
-    let description = format!("DOM-based XSS via {} to {}", source, sink);
+    let description = if is_prototype_pollution {
+        format!("Prototype pollution via {} to {}", source, sink)
+    } else {
+        format!("DOM-based XSS via {} to {}", source, sink)
+    };
 
     (payload, description)
 }

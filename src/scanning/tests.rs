@@ -755,6 +755,37 @@ fn test_get_dom_payloads_unknown_context_falls_back_without_custom_restriction()
 }
 
 #[test]
+fn test_prototype_pollution_payloads_are_wired_into_reflection_and_dom_catalogs() {
+    let mut args = default_scan_args();
+    args.encoders = vec!["none".to_string()];
+    args.custom_payload = None;
+    args.only_custom_payload = false;
+    let prototype = crate::payload::get_prototype_pollution_payloads();
+
+    let reflection = get_fallback_reflection_payloads(&args).expect("reflection payloads");
+    for payload in prototype.iter() {
+        assert!(
+            reflection.contains(payload),
+            "reflection fallback must carry the prototype payload {payload}"
+        );
+    }
+
+    for context in [None, Some(InjectionContext::Html(None))] {
+        let param = Param {
+            injection_context: context,
+            ..Param::new("q".to_string(), "seed".to_string(), Location::Query)
+        };
+        let dom = get_dom_payloads(&param, &args).expect("dom payloads");
+        for payload in prototype.iter() {
+            assert!(
+                dom.contains(payload),
+                "DOM catalog must carry the prototype payload {payload}"
+            );
+        }
+    }
+}
+
+#[test]
 fn test_interleave_payload_families_round_robins_and_preserves_order() {
     let out = interleave_payload_families(vec![
         vec!["a1".to_string(), "a2".to_string(), "a3".to_string()],
@@ -797,11 +828,14 @@ fn test_get_dom_payloads_unknown_context_samples_every_evidence_family_in_budget
     let clobber: HashSet<String> = crate::payload::get_dom_clobbering_payloads()
         .into_iter()
         .collect();
+    let prototype: HashSet<String> = crate::payload::get_prototype_pollution_payloads()
+        .into_iter()
+        .collect();
     let protocol: HashSet<String> = crate::payload::get_protocol_injection_payloads()
         .into_iter()
         .collect();
 
-    // A window far below INERT_ECHO_BUDGET (256): with five interleaved families
+    // A window far below INERT_ECHO_BUDGET (256): with six interleaved families
     // each appears within the first few rounds.
     let window = 60.min(payloads.len());
     let head = &payloads[..window];
@@ -810,6 +844,7 @@ fn test_get_dom_payloads_unknown_context_samples_every_evidence_family_in_budget
         ("attribute/event-handler", &attr),
         ("mXSS", &mxss),
         ("dom-clobbering", &clobber),
+        ("prototype-pollution", &prototype),
         ("protocol/url", &protocol),
     ] {
         assert!(
@@ -903,11 +938,14 @@ fn test_get_fallback_reflection_payloads_samples_every_family_in_budget_window()
         .into_iter()
         .collect();
     let mxss: HashSet<String> = crate::payload::get_mxss_payloads().into_iter().collect();
+    let prototype: HashSet<String> = crate::payload::get_prototype_pollution_payloads()
+        .into_iter()
+        .collect();
     let protocol: HashSet<String> = crate::payload::get_protocol_injection_payloads()
         .into_iter()
         .collect();
 
-    // Far below the reflection phase's transformed-echo budget: with four
+    // Far below the reflection phase's transformed-echo budget: with five
     // interleaved families each appears within the first few rounds.
     let window = 40.min(payloads.len());
     let head = &payloads[..window];
@@ -915,6 +953,7 @@ fn test_get_fallback_reflection_payloads_samples_every_family_in_budget_window()
         ("html-tag", &html),
         ("attribute/event-handler", &attr),
         ("mXSS", &mxss),
+        ("prototype-pollution", &prototype),
         ("protocol/url", &protocol),
     ] {
         assert!(
@@ -926,7 +965,7 @@ fn test_get_fallback_reflection_payloads_samples_every_family_in_budget_window()
 
 /// The interleave is a pure reordering: same union, same within-family order,
 /// no member added or dropped (the encoder pass dedups downstream, so this
-/// asserts the pre-encoder base is a permutation of the four families).
+/// asserts the pre-encoder base is a permutation of the five families).
 #[test]
 fn test_get_fallback_reflection_payloads_union_and_within_family_order_preserved() {
     let mut args = default_scan_args();
@@ -939,6 +978,7 @@ fn test_get_fallback_reflection_payloads_union_and_within_family_order_preserved
     let html = crate::payload::get_dynamic_xss_html_payloads();
     let attr = crate::payload::get_dynamic_xss_attribute_payloads();
     let mxss = crate::payload::get_mxss_payloads();
+    let prototype = crate::payload::get_prototype_pollution_payloads();
     let protocol = crate::payload::get_protocol_injection_payloads();
 
     // Union: every family member is present, and the total is exactly the sum
@@ -946,7 +986,7 @@ fn test_get_fallback_reflection_payloads_union_and_within_family_order_preserved
     // it so the assertion is revisited rather than silently masked).
     use std::collections::HashSet;
     let actual: HashSet<&String> = payloads.iter().collect();
-    for fam in [&html, &attr, &mxss, &protocol] {
+    for fam in [&html, &attr, &mxss, &prototype, &protocol] {
         for p in fam {
             assert!(
                 actual.contains(p),
@@ -956,8 +996,8 @@ fn test_get_fallback_reflection_payloads_union_and_within_family_order_preserved
     }
     assert_eq!(
         payloads.len(),
-        html.len() + attr.len() + mxss.len() + protocol.len(),
-        "interleave must be a permutation of the four families' union"
+        html.len() + attr.len() + mxss.len() + prototype.len() + protocol.len(),
+        "interleave must be a permutation of the five families' union"
     );
 
     // Within-family order: the subsequence of `payloads` restricted to each
@@ -966,6 +1006,7 @@ fn test_get_fallback_reflection_payloads_union_and_within_family_order_preserved
         ("html", &html),
         ("attr", &attr),
         ("mxss", &mxss),
+        ("prototype-pollution", &prototype),
         ("protocol", &protocol),
     ] {
         let fam_set: HashSet<&String> = fam.iter().collect();

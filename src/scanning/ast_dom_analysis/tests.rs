@@ -391,6 +391,164 @@ document.getElementById('go').setAttributeNS(null, 'class', q);
 }
 
 #[test]
+fn direct_dom_event_property_assignment_is_a_sink() {
+    let code = r#"
+var q = new URLSearchParams(location.search).get('q');
+document.getElementById('go').onclick = q;
+"#;
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter()
+            .any(|v| v.sink == "onclick" && v.source.contains("URLSearchParams")),
+        "el.onclick = q must fire with the URL source; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn bound_dom_element_event_property_assignment_is_a_sink() {
+    let code = r#"
+const el = document.getElementById('go');
+el.onmouseover = location.hash.slice(1);
+"#;
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter().any(|v| v.sink == "onmouseover"),
+        "a variable bound to getElementById must keep its DOM identity; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn window_event_property_assignment_is_a_sink() {
+    let code = "window.onload = location.hash.slice(1);";
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter().any(|v| v.sink == "onload"),
+        "window.onload must fire; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn window_document_body_event_property_assignment_is_a_sink() {
+    let code = "window.document.body.onclick = location.hash.slice(1);";
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter().any(|v| v.sink == "onclick"),
+        "window.document.body.onclick must fire; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn object_assign_dom_event_property_is_a_sink() {
+    let code = r#"
+var q = location.hash.slice(1);
+Object.assign(document.getElementById('go'), { onclick: q });
+"#;
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter().any(|v| v.sink == "onclick"),
+        "Object.assign into a DOM element's onclick must fire; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn plain_object_event_named_field_is_not_a_dom_event_sink() {
+    let code = r#"
+var q = location.hash.slice(1);
+var opts = {};
+opts.onclick = q;
+opts.once = q;
+"#;
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.is_empty(),
+        "event-named fields on a plain object must not fire; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn prototype_pollution_proto_write_is_a_sink() {
+    let code = r#"
+var q = location.hash.slice(1);
+var target = {};
+target.__proto__.polluted = q;
+"#;
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter().any(|v| v.sink == "prototypePollution:__proto__"),
+        "explicit __proto__ write must fire; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn prototype_pollution_constructor_prototype_write_is_a_sink() {
+    let code = r#"
+var q = location.hash.slice(1);
+var target = {};
+target.constructor.prototype.innerHTML = q;
+"#;
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter()
+            .any(|v| v.sink == "prototypePollution:constructor.prototype"),
+        "constructor.prototype write must fire; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn prototype_pollution_tainted_key_assignment_is_a_sink() {
+    let code = r#"
+var key = new URLSearchParams(location.search).get('key');
+var target = {};
+target[key] = 'polluted';
+"#;
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter().any(|v| v.sink == "prototypePollution:key"),
+        "attacker-controlled property key must fire; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn prototype_pollution_set_prototype_of_is_a_sink() {
+    let code = r#"
+var q = location.hash.slice(1);
+var target = {};
+Object.setPrototypeOf(target, q);
+"#;
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter()
+            .any(|v| v.sink == "prototypePollution:setPrototypeOf"),
+        "Object.setPrototypeOf with a tainted prototype must fire; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn constant_key_assignment_is_not_reported_as_prototype_pollution() {
+    let code = r#"
+var value = location.hash.slice(1);
+var map = {};
+map['safe'] = value;
+"#;
+    let r = AstDomAnalyzer::new().analyze(code).unwrap();
+    assert!(
+        r.iter().all(|v| !v.sink.starts_with("prototypePollution")),
+        "a constant key is ordinary data flow, not prototype pollution; got {:?}",
+        r.iter().map(|v| v.sink.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn indirect_eval_comma_sequence_is_a_sink() {
     // `(0, eval)(x)` detaches the eval reference so the code runs in global
     // scope; the callee is a parenthesized SequenceExpression, which the plain

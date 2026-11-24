@@ -388,6 +388,40 @@ eval(code);
     ))
 }
 
+/// DOM event injection: a looked-up element's event-handler property receives
+/// attacker-controlled text.
+async fn vuln_dom_event_property(Query(p): Query<HashMap<String, String>>) -> impl IntoResponse {
+    let q = p.get("q").cloned().unwrap_or_default();
+    Html(format!(
+        r#"<!DOCTYPE html><html><body>
+<button id="go">Go</button>
+<script>
+var params = new URLSearchParams(window.location.search);
+var q = params.get("q") || "{q}";
+var go = document.getElementById("go");
+go.onclick = q;
+</script></body></html>"#
+    ))
+}
+
+/// Prototype pollution: the attacker chooses the merge key, then it is written
+/// into a plain object (the `__proto__` / `constructor.prototype` primitive).
+async fn vuln_dom_prototype_pollution(
+    Query(p): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let key = p.get("key").cloned().unwrap_or_default();
+    Html(format!(
+        r#"<!DOCTYPE html><html><body>
+<div id="out"></div>
+<script>
+var params = new URLSearchParams(window.location.search);
+var key = params.get("key") || "{key}";
+var target = {{}};
+target[key] = "polluted";
+</script></body></html>"#
+    ))
+}
+
 // --- Multi-param ---
 
 /// Two reflected params in different contexts (HTML body + CSS inline)
@@ -599,6 +633,11 @@ async fn start_test_server() -> SocketAddr {
         .route("/dom/innerhtml", get(vuln_dom_innerhtml))
         .route("/dom/docwrite", get(vuln_dom_docwrite))
         .route("/dom/eval", get(vuln_dom_eval))
+        .route("/dom/event-property", get(vuln_dom_event_property))
+        .route(
+            "/dom/prototype-pollution",
+            get(vuln_dom_prototype_pollution),
+        )
         // Multi-param
         .route("/multi", get(vuln_multi_param))
         // Partial reflection: prefix/suffix strip and regex extract
@@ -1173,6 +1212,55 @@ async fn test_dom_xss_eval_sink() {
     assert_detected(
         &run_scan_and_collect(args).await,
         "DOM XSS: URLSearchParams → eval",
+    );
+}
+
+#[tokio::test]
+async fn test_dom_event_and_prototype_pollution_three_lab_matrix() {
+    let addr = start_test_server().await;
+    let event_reflection = format!("http://{addr}/attr/event");
+    let event_property = format!("http://{addr}/dom/event-property");
+    let prototype = format!("http://{addr}/dom/prototype-pollution");
+
+    let mut args = base_scan_args();
+    args.targets = vec![
+        format!("{event_reflection}?q=test"),
+        format!("{event_property}?q=test"),
+        format!("{prototype}?key=test"),
+    ];
+    args.skip_ast_analysis = false;
+    args.encoders = vec!["none".to_string()];
+    args.max_payloads_per_param = 40;
+    let findings = run_scan_and_collect(args).await;
+
+    let on_target = |target: &str| {
+        findings.iter().any(|f| {
+            f["data"].as_str().unwrap_or_default().contains(target)
+                || f["evidence"].as_str().unwrap_or_default().contains(target)
+        })
+    };
+    let has = |target: &str, needle: &str| {
+        findings.iter().any(|f| {
+            let data = f["data"].as_str().unwrap_or_default();
+            let evidence = f["evidence"].as_str().unwrap_or_default();
+            (data.contains(target) || evidence.contains(target)) && evidence.contains(needle)
+        })
+    };
+
+    // Lab 1 — server-side event-handler attribute injection.
+    assert!(
+        on_target(&event_reflection),
+        "reflected event-handler lab lost its detection: {findings:?}"
+    );
+    // Lab 2 — DOM event-handler property assignment (new AST sink).
+    assert!(
+        has(&event_property, "Sink: onclick"),
+        "DOM event-property lab did not report the onclick sink: {findings:?}"
+    );
+    // Lab 3 — attacker-controlled key reaching an object write (new PP sink).
+    assert!(
+        has(&prototype, "Sink: prototypePollution"),
+        "prototype-pollution lab did not report the merge sink: {findings:?}"
     );
 }
 

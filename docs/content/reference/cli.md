@@ -263,6 +263,7 @@ Selectors:
 | `functions` | Confirmable sinks with filter-surviving variants (`alert`, `prompt`, ...) |
 | `awesome-alert` | Polished alert PoCs for screenshots (`alert(document.domain)`, ...) |
 | `dom-clobbering` | DOM clobbering vectors |
+| `prototype-pollution` | `__proto__` / `constructor.prototype` merge payloads and DOM-XSS gadgets |
 | `mxss` | Mutation-XSS / sanitizer-bypass payloads |
 | `blind` | Blind-XSS skeletons (`{}` = your OOB callback URL) |
 | `portswigger` | Remote: PortSwigger XSS cheatsheet |

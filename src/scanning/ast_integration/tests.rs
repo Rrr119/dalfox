@@ -325,6 +325,41 @@ fn test_generate_dom_xss_poc_for_urlsearchparams_source() {
 }
 
 #[test]
+fn test_generate_dom_xss_poc_for_event_property_uses_js() {
+    let (payload, description) = generate_dom_xss_poc("location.hash", "onclick");
+    assert!(
+        payload.contains("alert(1)")
+            && !payload.contains("<img")
+            && payload.contains(crate::scanning::markers::class_marker()),
+        "event-handler property should receive a JS primitive with a marker: {payload}"
+    );
+    assert!(description.contains("Sink") || description.contains("onclick"));
+}
+
+#[test]
+fn test_generate_dom_xss_poc_for_prototype_pollution_carries_merge_key_and_gadget() {
+    let (payload, description) = generate_dom_xss_poc("location.search", "prototypePollution:key");
+    assert!(
+        payload.contains("__proto__[innerHTML]") && payload.contains("alert(1)"),
+        "PP PoC must carry both the merge key and an executable gadget: {payload}"
+    );
+    assert!(
+        payload.contains(crate::scanning::markers::class_marker()),
+        "PP PoC must remain attributable to this scan: {payload}"
+    );
+    assert!(description.starts_with("Prototype pollution"));
+
+    let (payload, _) = generate_dom_xss_poc(
+        "location.search",
+        "prototypePollution:constructor.prototype",
+    );
+    assert!(
+        payload.contains("constructor[prototype][innerHTML]"),
+        "constructor.prototype PoC keeps its precise key shape: {payload}"
+    );
+}
+
+#[test]
 fn test_generate_dom_xss_poc_for_nested_urlsearchparams_source() {
     let (payload, description) =
         generate_dom_xss_poc("URLSearchParams.get(blob).get(query)", "innerHTML");

@@ -235,6 +235,7 @@ pub(crate) fn get_fallback_reflection_payloads(
             crate::payload::get_dynamic_xss_html_payloads(),
             crate::payload::get_dynamic_xss_attribute_payloads(),
             crate::payload::get_mxss_payloads(),
+            crate::payload::get_prototype_pollution_payloads(),
             crate::payload::get_protocol_injection_payloads(),
         ])
     };
@@ -486,20 +487,39 @@ pub(crate) fn get_dom_payloads_for_context(
         }
         // Known non-JS contexts: use locally generated payloads only (exclude remote) to avoid large cross-product
         Some(ctx) => {
+            // Prototype-pollution payloads are ordinary parameter values on
+            // the wire; send them alongside every HTML/attribute catalog so a
+            // merge endpoint sees the `__proto__` / `constructor.prototype`
+            // shapes even when discovery classified the reflection narrowly.
+            let adds_prototype_pollution = matches!(
+                ctx,
+                crate::parameter_analysis::InjectionContext::Html(_)
+                    | crate::parameter_analysis::InjectionContext::Attribute(_)
+                    | crate::parameter_analysis::InjectionContext::AttributeUrl(_)
+            );
             // If param has analysis data, use adaptive encoding for better bypass
             if param.invalid_specials.is_some() || param.valid_specials.is_some() {
                 let invalid = param.invalid_specials.as_deref().unwrap_or_default();
                 let valid = param.valid_specials.as_deref().unwrap_or_default();
                 let raw_only = args.encoders.iter().any(|e| e == "none");
-                let payloads = crate::scanning::xss_common::generate_adaptive_payloads(
+                let mut payloads = crate::scanning::xss_common::generate_adaptive_payloads(
                     ctx, invalid, valid, raw_only,
                 );
+                if adds_prototype_pollution {
+                    payloads.extend(crate::encoding::apply_encoders_to_payloads(
+                        &crate::payload::get_prototype_pollution_payloads(),
+                        &args.encoders,
+                    ));
+                }
                 return Ok(
                     crate::scanning::xss_common::apply_custom_alert_substitution(payloads, args),
                 );
             }
             // Use locally generated payloads only (no remote) to avoid large cross-product in DOM verification
-            let base_payloads = crate::scanning::xss_common::generate_dynamic_payloads(ctx);
+            let mut base_payloads = crate::scanning::xss_common::generate_dynamic_payloads(ctx);
+            if adds_prototype_pollution {
+                base_payloads.extend(crate::payload::get_prototype_pollution_payloads());
+            }
             let base_payloads =
                 crate::scanning::xss_common::apply_custom_alert_substitution(base_payloads, args);
             // Expand with shared encoder policy helper
@@ -515,7 +535,7 @@ pub(crate) fn get_dom_payloads_for_context(
         None => {
             // Issue #1156: round-robin interleave the evidence families so
             // every DOM-evidence kind (HTML-tag, event-handler/attribute,
-            // mXSS, DOM-clobbering, protocol/URL) is represented in any
+            // mXSS, DOM-clobbering, prototype-pollution, protocol/URL) is represented in any
             // prefix of the list — in particular within the first
             // `INERT_ECHO_BUDGET` payloads the DOM-phase early exit samples.
             // Plain concatenation appended the protocol/mXSS generators last
@@ -528,6 +548,7 @@ pub(crate) fn get_dom_payloads_for_context(
                 crate::payload::get_dynamic_xss_attribute_payloads(),
                 crate::payload::get_mxss_payloads(),
                 crate::payload::get_dom_clobbering_payloads(),
+                crate::payload::get_prototype_pollution_payloads(),
                 crate::payload::get_protocol_injection_payloads(),
             ]);
             if let Some(path) = &args.custom_payload {

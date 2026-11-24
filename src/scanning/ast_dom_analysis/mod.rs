@@ -702,6 +702,11 @@ struct DomXssVisitor<'a> {
     reflected_element_vars: HashMap<String, String>,
     /// Variables bound to a `<form>` element (see `expr_resolves_to_form`).
     form_element_vars: HashSet<String>,
+    /// Variables bound to any DOM element the page looked up or created
+    /// (`getElementById`, `querySelector`, `createElement`, `document.body`,
+    /// …). Used to distinguish an element's event-handler property
+    /// (`el.onclick = q`) from an ordinary object's same-named field.
+    dom_element_vars: HashSet<String>,
     /// Variables bound to an element of a known tag (`createElement('img')`,
     /// `new Image()`, `querySelector('iframe')`), lowercased. What `src` /
     /// `href` do depends on it: an image's `src` loads a picture, a
@@ -1172,6 +1177,7 @@ impl<'a> DomXssVisitor<'a> {
             reflected_markup: Arc::default(),
             reflected_element_vars: HashMap::new(),
             form_element_vars: HashSet::new(),
+            dom_element_vars: HashSet::new(),
             element_tag_vars: Default::default(),
             response_object_vars: Default::default(),
             branch_depth: 0,

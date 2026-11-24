@@ -18,6 +18,7 @@ Dalfox는 여러 계열로부터 페이로드를 구성합니다:
 | **JavaScript** | `";alert(1);//` | `<script>` 블록 내부 |
 | **이벤트 핸들러** | `onmouseover=alert(1)` | 기존 속성 값 |
 | **DOM 클로버링** | `<img id=x>` | 레거시 DOM 조회 |
+| **프로토타입 오염** | `__proto__[innerHTML]=<img src=x onerror=alert(1)>` | 클라이언트 측 병합/복사 가젯 |
 | **URL 프로토콜** | `javascript:alert(1)` | `href`/`src` 계열 속성 |
 | **CSP 우회** | `strict-dynamic` 스크립트 가젯, nonce 재사용, 허용된 호스트의 JSONP | 응답에 우회 가능한 CSP가 있을 때 |
 | **mXSS** | `<foreignobject>`/DOMPurify 우회 | 새니타이저가 변형한 DOM |
@@ -33,7 +34,7 @@ Dalfox는 여러 계열로부터 페이로드를 구성합니다:
 - 따옴표로 감싼 속성 내부 → 속성 브레이크아웃과 스스로 실행되는 이벤트 핸들러 페이로드. URL 프로토콜 페이로드를 가장 먼저 보냄
 - `<script>` 내부 → 문자열 구분자 브레이크아웃(`'-alert(1)-'`, `${alert(1)}` 등)과 `</script>` 태그 브레이크아웃
 - `<style>` 내부 → `</style>` 브레이크아웃 뒤에 HTML 태그
-- 알 수 없음 → HTML, 속성, mXSS, DOM 클로버링, URL 프로토콜 페이로드를 번갈아 섞은 조합
+- 알 수 없음 → HTML, 속성, mXSS, DOM 클로버링, 프로토타입 오염, URL 프로토콜 페이로드를 번갈아 섞은 조합
 
 컨텍스트에 맞는 페이로드만 보내므로 요청 수가 줄어듭니다.
 
@@ -130,6 +131,7 @@ dalfox payload special-chars   # < > " ' ` ( ) ... 및 인코딩된 변형
 dalfox payload functions       # 확인 가능한 싱크: alert(1), window['alert'](1), ...
 dalfox payload awesome-alert   # PoC alert: alert(document.domain), alert(document.cookie)
 dalfox payload dom-clobbering  # DOM 클로버링 벡터
+dalfox payload prototype-pollution  # __proto__ / constructor.prototype 병합 페이로드
 dalfox payload mxss            # mutation-XSS / 새니타이저 우회 페이로드
 dalfox payload blind           # blind-XSS 스켈레톤 ({} = 콜백 URL)
 dalfox payload portswigger     # 원격 목록을 가져와 출력

@@ -94,6 +94,7 @@ Supported selectors:
 | `functions` | Confirmable sinks with filter-surviving variants (`alert(1)`, `window['alert'](1)`, `setTimeout('alert(1)')`, ...) |
 | `awesome-alert` | Polished alert PoCs for clean screenshots (`alert(document.domain)`, `alert(document.cookie)`, ...) |
 | `dom-clobbering` | DOM clobbering vectors |
+| `prototype-pollution` | `__proto__` / `constructor.prototype` merge payloads and DOM-XSS gadgets |
 | `mxss` | Mutation-XSS / sanitizer-bypass payloads |
 | `blind` | Blind-XSS skeletons (`{}` = your OOB callback URL; change it to `{callback}` before feeding them to `--custom-blind-xss-payload`) |
 | `payloadbox` | Fetches current remote XSS payloads from PayloadBox provider (requires network) |

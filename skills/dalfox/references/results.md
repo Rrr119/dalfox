@@ -158,7 +158,8 @@ on reflection / DOM-verification findings; absent means no verdict, not
 - `sxss-inHTML` — same, under `--sxss` (stored)
 - suffixes on either: `-CSTI` (`{{…}}` template payload), `-VHtml` / `-DataBind` / `-NgBindHtml` / `-DangerouslySetInnerHTML` / `-FrameworkSink` (framework innerHTML sink)
 - `inHTML-HPP` — `--hpp` duplicated-parameter finding
-- `DOM-XSS` — AST source→sink finding
+- `DOM-XSS` — AST source→sink finding, including event-handler property writes
+  (`el.onclick = q`) and prototype-pollution merges (`target[key] = …`)
 - `blind-oob-<location>-<protocol>` — `--blind-oob` callback (e.g. `blind-oob-Query-http`)
 - `OutdatedComponent` — `--detect-outdated-libs` `[I]` finding
 

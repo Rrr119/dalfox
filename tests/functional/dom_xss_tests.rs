@@ -577,3 +577,42 @@ fn test_dom_xss_comprehensive_coverage() {
         println!("\nCoverage baselines are healthy; keep this as a regression guard.");
     }
 }
+
+#[test]
+fn test_dom_event_and_prototype_pollution_cases() {
+    let cases = load_dom_xss_cases().expect("Failed to load DOM XSS test cases");
+    let selected: Vec<&MockCase> = cases
+        .iter()
+        .filter(|c| (1500..1600).contains(&c.id))
+        .collect();
+    assert_eq!(
+        selected.len(),
+        4,
+        "the event/prototype lab matrix must stay pinned to four cases"
+    );
+
+    let analyzer = AstDomAnalyzer::new();
+    let mut matrix = Vec::new();
+    for case in selected {
+        let scripts = extract_javascript(&case.reflection);
+        let detected = scripts.iter().any(|script| {
+            analyzer
+                .analyze(script)
+                .map(|flows| !flows.is_empty())
+                .unwrap_or(false)
+        });
+        matrix.push((
+            case.id,
+            case.name.clone(),
+            detected,
+            case.expected_detection,
+        ));
+        assert_eq!(
+            detected, case.expected_detection,
+            "case {} ({}) detection disagrees with its lab label",
+            case.id, case.name
+        );
+    }
+
+    println!("DOM event / prototype lab matrix: {matrix:?}");
+}

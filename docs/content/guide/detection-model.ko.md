@@ -99,7 +99,7 @@ AST 탐지 결과를 고를 때는 `type == "A"`가 아니라 `detection_method 
 
 ### `ast`와 DOM-XSS의 천장
 
-AST 패스는 응답에 담긴 JavaScript를 파싱해, 위험한 소스(`location.hash`, `location.search`, `document.referrer`, `postMessage` 등)에서 온 데이터가 새니타이저를 거치지 않고 위험한 싱크(`innerHTML`, `document.write`, `eval` 등)에 도달하는지 추적합니다. 각 `<script>` 블록을 한 번 읽고 발견한 흐름을 모두 보고하므로, 명령줄에 넘기지 않은 입력도 결과에 나올 수 있습니다. 서버로 전송되지 않는 URL 프래그먼트도 마찬가지입니다. 랜딩 페이지에 대한 패스는 `-p`로 좁혀지지 않습니다. `-p`는 어떤 파라미터를 *요청*할지 정하는 옵션이고, 그 패스는 이미 받아 둔 응답을 읽기 때문입니다.
+AST 패스는 응답에 담긴 JavaScript를 파싱해, 위험한 소스(`location.hash`, `location.search`, `document.referrer`, `postMessage` 등)에서 온 데이터가 새니타이저를 거치지 않고 위험한 싱크(`innerHTML`, `document.write`, `eval`, DOM 요소의 이벤트 핸들러 프로퍼티 등)에 도달하는지 추적합니다. 공격자가 제어하는 프로퍼티 키가 객체 쓰기(`target[key] = …`)에 도달하는 흐름도 보고하며, 이는 `__proto__` / `constructor.prototype` 오염의 전제 조건입니다. 각 `<script>` 블록을 한 번 읽고 발견한 흐름을 모두 보고하므로, 명령줄에 넘기지 않은 입력도 결과에 나올 수 있습니다. 서버로 전송되지 않는 URL 프래그먼트도 마찬가지입니다. 랜딩 페이지에 대한 패스는 `-p`로 좁혀지지 않습니다. `-p`는 어떤 파라미터를 *요청*할지 정하는 옵션이고, 그 패스는 이미 받아 둔 응답을 읽기 때문입니다.
 
 결함처럼 보이지만 결함이 아닌 결과도 이것으로 설명됩니다. 순수 클라이언트 사이드 DOM-XSS에서는 JavaScript가 런타임에 페이로드를 페이지에 써 넣으므로, 페이로드가 서버 응답에 나타나지 않고 응답을 파싱하는 방식들은 찾을 대상이 없습니다. `location.hash → innerHTML`만 취약한 정적 페이지라면 `--only-poc v`가 아무것도 반환하지 않는 것이 정상입니다. 확인하려면 브라우저에서 devtools를 켜고 POC URL을 열어 보세요. Dalfox는 모든 AST 탐지 결과에 완성된 POC URL을 출력합니다. 랜딩 페이지에서 나온 탐지 결과 중 URL에 담을 수 없는 소스(`window.name`, `document.referrer`, 쿠키, `postMessage` 등)에는 `[manual POC: …]` 재현 힌트를 붙입니다.
 

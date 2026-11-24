@@ -114,6 +114,38 @@ impl<'a> DomXssVisitor<'a> {
                         right_source.clone(),
                     );
                 }
+                // DOM event-handler injection is most direct through
+                // `el.setAttribute('onclick', q)` / `Object.assign`, both
+                // handled elsewhere. Framework adapters and legacy code also
+                // spell the same write as `el.onclick = q`, so report it when
+                // the receiver is provably a DOM node or a window/document
+                // handler owner; an ordinary object's `onclick` field stays
+                // clean.
+                if right_tainted
+                    && Self::is_event_handler_property(prop_name)
+                    && self.expr_is_event_handler_receiver(&member.object)
+                {
+                    self.report_vulnerability_with_source(
+                        assign.span(),
+                        prop_name,
+                        right_source.clone(),
+                    );
+                }
+                // Explicit prototype writes (`obj.__proto__.x = q`,
+                // `Ctor.prototype.x = q`, `obj.constructor.prototype.x = q`).
+                // The tainted value itself becomes inherited by every object.
+                if right_tainted
+                    && let Some(sink) = self
+                        .get_member_string(member)
+                        .as_deref()
+                        .and_then(Self::prototype_pollution_sink_for_path)
+                {
+                    self.report_vulnerability_with_source(
+                        assign.span(),
+                        sink,
+                        right_source.clone(),
+                    );
+                }
                 if script_text_sink {
                     self.report_vulnerability_with_source(
                         assign.span(),
@@ -222,6 +254,28 @@ impl<'a> DomXssVisitor<'a> {
             }
             AssignmentTarget::ComputedMemberExpression(member) => {
                 let prop_name = self.get_computed_property_string(member);
+                if right_tainted
+                    && let Some(sink) = self
+                        .get_computed_member_string(member)
+                        .as_deref()
+                        .and_then(Self::prototype_pollution_sink_for_path)
+                {
+                    self.report_vulnerability_with_source(
+                        assign.span(),
+                        sink,
+                        right_source.clone(),
+                    );
+                } else if self.is_tainted(&member.expression) {
+                    // `target[location.hash.slice(1)] = value`: the attacker
+                    // chooses the property name, which is the prerequisite for
+                    // `__proto__` / `constructor.prototype` pollution.
+                    let key_source = self.find_source_in_expr(&member.expression);
+                    self.report_vulnerability_with_source(
+                        assign.span(),
+                        "prototypePollution:key",
+                        key_source,
+                    );
+                }
                 if let Some(property_name) = prop_name.as_deref() {
                     self.analyze_onmessage_assignment(
                         assign.span(),
@@ -300,6 +354,11 @@ impl<'a> DomXssVisitor<'a> {
                     None => {
                         self.element_tag_vars.remove(target_name);
                     }
+                }
+                if self.expr_is_dom_element_receiver(&assign.right) {
+                    self.dom_element_vars.insert(target_name.to_string());
+                } else {
+                    self.dom_element_vars.remove(target_name);
                 }
                 let mut assigned_instance_class = false;
                 self.clear_instance_field_taints(target_name);
@@ -445,6 +504,29 @@ impl<'a> DomXssVisitor<'a> {
                 "href" | "xlink:href" | "srcdoc" | "src" | "formaction"
             )
     }
+    /// A standard DOM event-handler property (`onclick`, `onload`, ...), not
+    /// an arbitrary object field that merely starts with `on`.
+    fn is_event_handler_property(name: &str) -> bool {
+        crate::payload::is_common_event_handler_name(name)
+    }
+    /// The prototype-pollution sink named by an assignment path, when the
+    /// write targets a prototype object rather than an ordinary field.
+    fn prototype_pollution_sink_for_path(path: &str) -> Option<&'static str> {
+        let segments: Vec<&str> = path.split('.').collect();
+        if segments.iter().any(|segment| *segment == "__proto__") {
+            return Some("prototypePollution:__proto__");
+        }
+        if segments
+            .windows(2)
+            .any(|pair| pair == ["constructor", "prototype"])
+        {
+            return Some("prototypePollution:constructor.prototype");
+        }
+        if segments.iter().any(|segment| *segment == "prototype") {
+            return Some("prototypePollution:prototype");
+        }
+        None
+    }
     /// `attr` set on an element of `tag` cannot run script: `src` on media
     /// elements loads a picture, a clip or a caption track, and a `<link>`'s
     /// `href` a stylesheet or a preload.
@@ -561,6 +643,24 @@ impl<'a> DomXssVisitor<'a> {
         // Also treat member method name itself as sink
         // (e.g., el.insertAdjacentHTML, document['write'](...))
         let member_method_name = self.get_callee_property_name(&call.callee);
+        if member_method_name.as_deref() == Some("setPrototypeOf")
+            && call.arguments.len() >= 2
+            && self.get_expr_string(&call.callee).is_some_and(|path| {
+                matches!(
+                    path.as_str(),
+                    "Object.setPrototypeOf" | "Reflect.setPrototypeOf"
+                )
+            })
+            && let Some(arg1) = call.arguments.get(1)
+            && let (true, source) = self.argument_taint_and_source(arg1)
+        {
+            self.report_vulnerability_with_source(
+                call.span(),
+                "prototypePollution:setPrototypeOf",
+                source,
+            );
+            return true;
+        }
         if let Some(method_name) = member_method_name
             && self.sinks.contains(method_name.as_str())
         {
@@ -1467,7 +1567,7 @@ impl<'a> DomXssVisitor<'a> {
                 let is_sink_key = if is_location {
                     key == "href"
                 } else {
-                    self.is_assignment_sink_property(&key)
+                    self.is_assignment_sink_property(&key) || Self::is_event_handler_property(&key)
                 };
                 if !is_sink_key || !self.is_tainted(&p.value) {
                     continue;
@@ -1498,6 +1598,13 @@ impl<'a> DomXssVisitor<'a> {
             Expression::ParenthesizedExpression(paren) => {
                 self.expr_is_dom_element_receiver(&paren.expression)
             }
+            Expression::Identifier(id) => {
+                self.element_tag_vars.contains_key(id.name.as_str())
+                    || self.dom_element_vars.contains(id.name.as_str())
+                    || self.reflected_element_vars.contains_key(id.name.as_str())
+                    || self.form_element_vars.contains(id.name.as_str())
+                    || self.script_element_vars.contains(id.name.as_str())
+            }
             Expression::CallExpression(call) => matches!(
                 self.get_callee_property_name(&call.callee).as_deref(),
                 Some(
@@ -1508,12 +1615,34 @@ impl<'a> DomXssVisitor<'a> {
                         | "closest"
                 )
             ),
-            Expression::StaticMemberExpression(member) => matches!(
-                self.get_member_string(member).as_deref(),
-                Some("document.body" | "document.head" | "document.documentElement")
-            ),
+            Expression::StaticMemberExpression(member) => {
+                self.get_member_string(member).is_some_and(|path| {
+                    matches!(
+                        path.as_str(),
+                        "document.body" | "document.head" | "document.documentElement"
+                    ) || path.ends_with(".document.body")
+                        || path.ends_with(".document.head")
+                        || path.ends_with(".document.documentElement")
+                })
+            }
             _ => false,
         }
+    }
+    /// True when `expr` owns DOM event-handler properties: an element the page
+    /// looked up/created, or the global `window` / `document` object.
+    pub(super) fn expr_is_event_handler_receiver(&self, expr: &Expression<'a>) -> bool {
+        if self.expr_is_dom_element_receiver(expr) {
+            return true;
+        }
+        if let Some(global) = self.global_alias_of(expr) {
+            return matches!(global, "window" | "document");
+        }
+        self.get_expr_string(expr).is_some_and(|path| {
+            matches!(
+                path.as_str(),
+                "window" | "document" | "self" | "globalThis" | "window.document" | "self.document"
+            )
+        })
     }
     /// An iteration method handed a code-execution sink as its callback —
     /// `q.split('\n').map(eval)`.

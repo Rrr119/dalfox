@@ -14,6 +14,7 @@ const KNOWN_SELECTORS: &[&str] = &[
     "functions",
     "awesome-alert",
     "dom-clobbering",
+    "prototype-pollution",
     "mxss",
     "blind",
     "all",
@@ -67,7 +68,7 @@ pub struct PayloadArgs {
     #[arg(
         value_name = "SELECTOR",
         help = "Payload set to print (see --help for the list); omit for a summary",
-        long_help = "Payload set to print; omit for a summary of every set.\n  - javascript: JS execution payloads for script / JS-string contexts\n  - event-handlers: DOM event handler attribute names\n  - useful-tags: HTML tags useful for XSS\n  - uri-scheme: scheme payloads (javascript:, data:, ...)\n  - special-chars: special characters and encoded variants for context probing\n  - functions: visibly confirmable sinks (alert, prompt, ...) and filter-surviving variants\n  - awesome-alert: alert PoCs for screenshots and demos\n  - dom-clobbering: DOM clobbering payloads\n  - mxss: mutation-XSS / sanitizer-bypass payloads\n  - blind: blind-XSS skeletons ({} = your callback URL)\n  - payloadbox: remote payloads from PayloadBox (network fetch)\n  - portswigger: remote payloads from PortSwigger (network fetch)\n  - all: every local set, each under a '# name' header"
+        long_help = "Payload set to print; omit for a summary of every set.\n  - javascript: JS execution payloads for script / JS-string contexts\n  - event-handlers: DOM event handler attribute names\n  - useful-tags: HTML tags useful for XSS\n  - uri-scheme: scheme payloads (javascript:, data:, ...)\n  - special-chars: special characters and encoded variants for context probing\n  - functions: visibly confirmable sinks (alert, prompt, ...) and filter-surviving variants\n  - awesome-alert: alert PoCs for screenshots and demos\n  - dom-clobbering: DOM clobbering payloads\n  - prototype-pollution: __proto__ / constructor.prototype merge payloads and gadgets\n  - mxss: mutation-XSS / sanitizer-bypass payloads\n  - blind: blind-XSS skeletons ({} = your callback URL)\n  - payloadbox: remote payloads from PayloadBox (network fetch)\n  - portswigger: remote payloads from PortSwigger (network fetch)\n  - all: every local set, each under a '# name' header"
     )]
     pub selector: Option<String>,
 
@@ -228,6 +229,10 @@ fn static_selector_groups() -> Vec<(&'static str, Vec<String>)> {
         (
             "dom-clobbering",
             crate::payload::get_dom_clobbering_payloads(),
+        ),
+        (
+            "prototype-pollution",
+            crate::payload::get_prototype_pollution_payloads(),
         ),
         ("mxss", crate::payload::get_mxss_payloads()),
         // XSS_BLIND_PAYLOADS carries a `{}` placeholder for the OOB callback

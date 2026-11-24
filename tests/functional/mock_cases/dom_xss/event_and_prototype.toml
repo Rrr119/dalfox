@@ -1,0 +1,76 @@
+# DOM event-handler and prototype-pollution flows introduced for the
+# three-lab matrix. These are pure client-side pages: the server response is
+# static, so only the AST pass can find them.
+
+[[case]]
+id = 1501
+name = "dom_event_handler_property"
+description = "Tainted value assigned to a looked-up element's onclick property"
+handler_type = "dom_xss"
+reflection = """
+<html>
+<body>
+<button id="go">Go</button>
+<script>
+var q = new URLSearchParams(location.search).get('q');
+var go = document.getElementById('go');
+go.onclick = q;
+</script>
+</body>
+</html>
+"""
+expected_detection = true
+
+[[case]]
+id = 1502
+name = "prototype_pollution_proto_write"
+description = "Tainted value written through __proto__"
+handler_type = "dom_xss"
+reflection = """
+<html>
+<body>
+<script>
+var q = new URLSearchParams(location.search).get('q');
+var target = {};
+target.__proto__.polluted = q;
+</script>
+</body>
+</html>
+"""
+expected_detection = true
+
+[[case]]
+id = 1503
+name = "prototype_pollution_tainted_key"
+description = "Attacker-controlled property key used in an object write"
+handler_type = "dom_xss"
+reflection = """
+<html>
+<body>
+<script>
+var key = new URLSearchParams(location.search).get('key');
+var target = {};
+target[key] = 'polluted';
+</script>
+</body>
+</html>
+"""
+expected_detection = true
+
+[[case]]
+id = 1504
+name = "plain_object_event_named_field"
+description = "Event-named field on a plain config object is not a DOM sink"
+handler_type = "dom_xss"
+reflection = """
+<html>
+<body>
+<script>
+var q = location.hash.slice(1);
+var config = {};
+config.onclick = q;
+</script>
+</body>
+</html>
+"""
+expected_detection = false
